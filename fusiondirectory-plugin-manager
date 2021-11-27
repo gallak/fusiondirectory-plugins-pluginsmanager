@@ -1,0 +1,1283 @@
+#!/usr/bin/perl
+
+########################################################################
+#
+#  fusiondirectory-plugin-manager
+#
+#  Manage fusiondirectory installs from the command line
+#
+#  This code is part of FusionDirectory (http://www.fusiondirectory.org/)
+#  Copyright (C) 2011-2018  FusionDirectory
+#  Copyright (C) 2018-2021  Antoine Gallavardin
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
+#
+########################################################################
+
+use strict;
+use warnings;
+use 5.008;
+
+# used to manage files
+use Path::Class;
+
+# used for checking config dirs rights (make the translation for lstat output)
+use Fcntl ':mode';
+
+# used to handle ldap connections
+use Net::LDAP;
+
+# used to base64 encode
+use MIME::Base64;
+
+# used to generate {SSHA} password (for LDAP)
+use Digest::SHA;
+use Crypt::CBC;
+use Bytes::Random::Secure qw(random_string_from);
+
+# used to uncompress tar.gz
+use Archive::Extract;
+
+# used to copy files
+use File::Copy::Recursive qw(rcopy);
+
+#XML parser
+use XML::Twig;
+
+# To hide password input
+use Term::ReadKey;
+
+# To import yaml
+use YAML::XS 'LoadFile';
+
+# To compare version
+use version;
+
+use Data::Dumper;
+
+# fd's directory and class.cache file's path declaration
+my %vars = (
+ fd_home          => "/var/www/fusiondirectory",
+ fd_cache         => "/var/cache/fusiondirectory",
+ fd_config_dir    => "/etc/fusiondirectory",
+ fd_smarty_path   => "/usr/share/php/smarty3/Smarty.class.php",
+ fd_spool_dir     => "/var/spool/fusiondirectory",
+ ldap_conf        => "/etc/ldap/ldap.conf",
+ config_file      => "fusiondirectory.conf",
+ secrets_file     => "fusiondirectory.secrets",
+ locale_dir       => "locale",
+ class_cache      => "class.cache",
+ locale_cache_dir => "locale",
+ tmp_dir          => "tmp",
+ fai_log_dir      => "fai",
+ template_dir     => "template"
+);
+
+my ($fd_config,$fd_secrets,$locale_dir,$class_cache,$locale_cache_dir,$tmp_dir,$fai_log_dir,$template_dir);
+
+my (@root_config_dirs,@apache_config_dirs,@config_dirs);
+
+my @plugin_types = qw(addons admin personal);
+my $yes_flag = 0;
+
+my %classes_hash_result = ();
+my %i18n_hash_result = ();
+
+my $configrdn   = "cn=config,ou=fusiondirectory";
+# AGA
+my $configpluginrdn = "ou=plugins";
+
+
+my %pluginmanagementmapping = (
+  "cn"                              => "information:name",
+  "description"                     => "information:description",
+  "fdPluginInfoAuthor"              => "information:author",
+  "fdPluginInfoVersion"             => "information:version",
+  "fdPluginInfoHomeUrl"             => "information:homeUrl",
+  "fdPluginInfoTicketUrl"           => "information:ticketUrl",
+  "fdPluginInfoDiscussionUrl"       => "information:discussionUrl",
+  "fdPluginInfoIconUrl"             => "information:iconUrl",
+  "fdPluginInfoSchemaUrl"           => "information:schemaUrl",
+  "fdPluginInfoStatus"              => "information:status",
+  "fdPluginReqFdVersion"            => "requirement:fdVersion",
+  "fdPluginReqPhpVersion"           => "requirement:phpVersion",
+  "fdPluginReqPluginList"           => "requirement:pluginList",
+  "fdPluginContentPhpClass"         => "content:phpClassList",
+  "fdPluginContentLdapObject"       => "content:ldapObjectList",
+  "fdPluginContentLdapAttributes"   => "content:ldapAttributeList",
+  "fdPluginContentFileList"         => "content:fileList",
+  "fdPluginInfoDownloadUrl"         => "information:downloadUrl",
+  "fdPluginInfoSupport"             => "information:support",
+  "fdPluginInfoTags"                => "information:tags",
+  "fdPluginInfoLogoUrl"             => "information:logoUrl",
+  "fdPluginInfoScreenshotUrl"       => "information:screenshotUrl",
+
+);
+
+
+my $plugin_name = "";
+my $plugins_archive = "";
+my $plugin_register_only = 0;
+#################################################################################################################################################
+
+# ask a question send as parameter, and return true if the answer is "yes"
+sub ask_yn_question {
+  return 1 if ($yes_flag);
+  my ($question) = @_;
+  print ( "$question [Yes/No]?\n" );
+
+  while ( my $input = <STDIN> ) {
+    # remove the \n at the end of $input
+    chomp $input;
+
+    # if user's answer is "yes"
+    if ( lc($input) eq "yes" || lc($input) eq "y") {
+      return 1;
+    # else if he answer "no"
+    } elsif ( lc($input) eq "no" || lc($input) eq "n") {
+      return 0;
+    }
+  }
+}
+
+# function that ask for an user input and do some checks
+sub ask_user_input {
+ my ($thing_to_ask, $default_answer, $hide_input) = @_;
+ my $answer;
+
+ if (defined $default_answer) {
+   $thing_to_ask .= " [$default_answer]";
+ }
+ print $thing_to_ask.":\n";
+
+ if (defined $hide_input && $hide_input) {
+   ReadMode('noecho');
+ }
+
+ do
+ {
+   if ($answer = <STDIN>) {
+     chomp $answer;
+     $answer =~ s/^\s+|\s+$//g;
+   } else {
+     $answer = "";
+   }
+ } while (($answer eq "") && (not defined $default_answer));
+
+ ReadMode('restore');
+
+ if ($answer eq "") {
+   return $default_answer;
+ }
+ return $answer;
+}
+
+# Die on all LDAP error except for «No such object»
+sub die_on_ldap_errors
+{
+  my ($mesg) = @_;
+  if (($mesg->code != 0) && ($mesg->code != 32)) {
+    die $mesg->error;
+  }
+}
+
+
+####################################################### class.cache update #########################################################################
+
+# function that scan recursivly a directory to find .inc and . php
+# then return a hash with class => path to the class file
+sub get_classes {
+
+    my ($path) = @_;
+
+    # if this function has been called without a parameter
+    die ("! function get_classes called without parameter\n") if ( !defined($path) );
+
+    # create a "dir" object with the path
+    my $dir = dir ($path) or die ("! Can't open $path\n");
+
+    my $contrib_dir = dir($vars{fd_home},"contrib");
+    if ("$dir" eq "$contrib_dir") {
+        return;
+    }
+
+    # create an array with the content of $dir
+    my @dir_files = $dir->children;
+
+    foreach my $file (@dir_files) {
+        # recursive call if $file is a directory
+        if ( -d $file ) {
+            get_classes($file);
+            next;
+        }
+
+        # only process if $file is a .inc or a .php file
+        if ( ( $file =~ /.*\.inc$/ ) && ( $file !~ /.*smarty.*/ ) ) {
+          # put the entire content of the file pointed by $file in $data
+          my @lines = $file->slurp;
+
+          # modifing $file, to contains relative path, not complete one
+          $file =~ s/^$vars{fd_home}//;
+
+          foreach my $line ( @lines ) {
+            # remove \n from the end of each line
+            chomp $line;
+
+            # process for lines beginning with "class", and extracting the 2nd word (the class name)
+            if ( $line =~ /^(abstract )?class\s*(\w+).*/ ) {
+              # adding the values (class name and file path) to the hash
+              $classes_hash_result{$2} = $file;
+            }
+
+            # process for lines beginning with "interface", and extracting the 2nd word (the interface name)
+            if ( $line =~ /^interface\s*(\w+).*/ ) {
+              # adding the values (class name and file path) to the hash
+              $classes_hash_result{$1} = $file;
+            }
+          }
+        }
+    }
+    return %classes_hash_result;
+}
+
+# call get_classes and create /var/cache/fusiondirectory/class.cache
+sub rescan_classes {
+
+  # hash that will contain the result of the "get_classes" function
+  my %get_classes_result = get_classes ($vars{fd_home});
+
+  # create a "file" object with the $class_cache path
+  my $file_class = file ($class_cache);
+
+  # create the handler (write mode) for the file previoulsy created
+  my $fhw = $file_class->openw() or die ("! Unable to open $class_cache in write mode\n");
+
+  # first lines of class.cache
+  $fhw->print ("<?php\n\t\$class_mapping= array(\n");
+
+  # for each $key/$value, writting a new line to $class_cache
+  while ( my($key,$value) = each %get_classes_result ) {
+    $fhw->print ("\t\t\"$key\" => \"$value\",\n");
+  }
+
+  # last line of classe.cache
+  $fhw->print ("\t);\n?>");
+
+  $fhw->close or die ("! Can't close $class_cache\n");
+}
+
+###################################################### Internalisation's update ####################################################################################
+
+# function that create .mo files with .po for each language
+sub get_i18n {
+
+    my ($path) = @_;
+
+    # if this function has been called without a parameter
+    die ("! function get_i18n called without parameter" ) if ( !defined($path) );
+
+    # create a "dir" object
+    my $dir = dir ($path) or die ("! Can't open $path\n");
+
+    # create an array with the content of $dir
+    my @dir_files = $dir->children;
+
+    foreach my $file (@dir_files) {
+      # recursive call if $file is a directory
+      if (-d $file) {
+        %i18n_hash_result = get_i18n ($file);
+        next;
+      }
+
+      # if the file's directory is ???/language/fusiondirectory.po
+      if ($file =~ qr{^.*/(\w+)/fusiondirectory.po$}) {
+        # push the file's path in the language (fr/en/es/it...) array (wich is inside the hash pointed by $ref_result
+        push @{$i18n_hash_result{$1}}, $file;
+      }
+    }
+  return %i18n_hash_result;
+}
+
+# call get_i18n with the FusionDirectory's locales's directory and the hash that will contain the result in parameter
+sub rescan_i18n {
+
+  # hash that will contain the result of the "get_i18n" function
+  my %get_i18n_result = get_i18n ($locale_dir);
+
+  while ( my ($lang, $files) = each %get_i18n_result ) {
+
+    # directory wich will contain the .mo file for each language
+    my $lang_cache_dir = dir ("$locale_cache_dir/$lang/LC_MESSAGES");
+
+    # if $lang_cache_dir doesn't already exists, creating it
+    if ( !-d $lang_cache_dir ) {
+      $lang_cache_dir->mkpath or die ("! Can't create $locale_cache_dir/$lang/LC_MESSAGES");
+    }
+
+    # glue .po files's names
+    my $po_files = join(" ", @{$files});
+    chomp $po_files;
+
+    # merging .po files
+    system ( "msgcat --use-first ".$po_files.">".$lang_cache_dir."/fusiondirectory.po" ) and die ("! Unable to merge .po files for $lang with msgcat, is it already installed?\n");
+
+    # compiling .po files in .mo files
+    system ( "msgfmt -o $lang_cache_dir/fusiondirectory.mo $lang_cache_dir/fusiondirectory.po && rm $lang_cache_dir/fusiondirectory.po" ) and die ("! Unable to compile .mo files with msgfmt, is it already installed?\n");
+  }
+}
+
+sub get_locations_from_config_file
+{
+  my $twig = XML::Twig->new();
+  $twig->safe_parsefile($fd_config) or die("There is an error in $fd_config XML code: ".(split /\n/, $@)[1]."\n");
+  my @locs = $twig->root->first_child('main')->children('location');
+  my %locations = ();
+  foreach my $loc (@locs) {
+    $loc->lc_attnames();
+    my $ref = $loc->first_child('referral');
+    # Ignore case
+    $ref->lc_attnames();
+    $locations{$loc->{'att'}->{'name'}} = {
+      'tls'       => 0,
+      'uri'       => $ref->{'att'}->{'uri'},
+      'base'      => ($ref->{'att'}->{'base'} or $loc->{'att'}->{'base'} or ''),
+      'bind_dn'   => $ref->{'att'}->{'admindn'},
+      'bind_pwd'  => $ref->{'att'}->{'adminpassword'}
+    };
+    if (defined $loc->{'att'}->{'ldaptls'} and $loc->{'att'}->{'ldaptls'} =~ m/true/i) {
+      $locations{$loc->{'att'}->{'name'}}->{'tls'} = 1
+    }
+  }
+  return \%locations;
+}
+
+# function that initiate the ldap connexion, and bind as the ldap's admin
+sub get_ldap_connexion {
+  my %hash_result = ();
+  my $bind_dn = "";
+  my $bind_pwd = "";
+  my $uri = "";
+  my $base = "";
+  my $tls = 0;
+
+  # read ldap's server's info from /etc/fusiondirectory/fusiondirectory.conf
+  if (-e $fd_config) {
+    my $locations = get_locations_from_config_file();
+
+    my ($location) = keys(%$locations);
+    if (scalar(keys(%$locations)) > 1) {
+      my $question = "There are several locations in your config file, which one should be used : (".join(',',keys(%$locations)).")";
+      my $answer;
+      do {
+        $answer = ask_user_input ($question, $location);
+      } while (not exists($locations->{$answer}));
+      $location = $answer;
+    }
+
+    if ($locations->{$location}->{'base'} ne '') {
+      $uri  = $locations->{$location}->{'uri'};
+      $base = $locations->{$location}->{'base'};
+    } elsif ($locations->{$location}->{'uri'} =~ qr|^(.*)/([^/]+)$|) {
+      # Format from FD<1.3
+      $uri  = $1;
+      $base = $2;
+    } else {
+      die '"'.$locations->{$location}->{'uri'}.'" does not contain any base!';
+    }
+    $bind_dn  = $locations->{$location}->{'bind_dn'};
+    $bind_pwd = $locations->{$location}->{'bind_pwd'};
+    $tls      = $locations->{$location}->{'tls'};
+
+  # if can't find fusiondirectory.conf
+  } else {
+
+    if ( ask_yn_question ("Can't find fusiondirectory.conf, do you want to specify LDAP's information yourself ?: ") ) {
+      $uri = ask_user_input ("LDAP server's URI");
+      $base = ask_user_input ("Search base");
+      $hash_result{base} = $base;
+
+      $bind_dn = ask_user_input ("Bind DN");
+      $bind_pwd = ask_user_input("Bind password", undef, 1);
+    } else {
+      return;
+    }
+  }
+
+  # ldap connection
+  my $ldap = Net::LDAP->new ($uri) or die ("! Can't contact LDAP server $uri\n");
+
+  $hash_result{ldap} = $ldap;
+  $hash_result{base} = $base;
+
+  # bind to the LDAP server
+  if (-e $fd_secrets) {
+    open(my $secrets, q{<}, $fd_secrets) || die ("Could not open $fd_secrets");
+    my $key = "";
+    while(<$secrets>) {
+      if ($_ =~ m/RequestHeader set FDKEY ([^ \n]+)\n/) {
+        $key = $1;
+        last;
+      }
+    }
+    close($secrets);
+    $bind_pwd = cred_decrypt($bind_pwd, $key);
+  }
+
+  if ($tls) {
+    # Read LDAP config file
+    open (my $ldapconf, q{<}, $vars{ldap_conf}) or die ("! Failed to open ldap config file '$vars{ldap_conf}': $!\n");
+
+    my %tls_options = (
+      'REQCERT'   => 'require',
+      'CERT'      => '',
+      'KEY'       => '',
+      'CACERTDIR' => '',
+      'CACERT'    => '',
+    );
+    # Scan LDAP config
+    while (<$ldapconf>) {
+      /^\s*(#|$)/ && next;
+      chomp;
+      if (m/^TLS_(REQCERT|CERT|KEY|CACERTDIR|CACERT)\s+(.*)\s*$/i) {
+        $tls_options{uc $1} = $2;
+      }
+    }
+    close($ldapconf);
+
+    $ldap->start_tls(
+      verify      => $tls_options{'REQCERT'},
+      clientcert  => $tls_options{'CERT'},
+      clientkey   => $tls_options{'KEY'},
+      capath      => $tls_options{'CACERTDIR'},
+      cafile      => $tls_options{'CACERT'}
+    );
+  }
+
+  my $bind = $ldap->bind ($bind_dn, password => $bind_pwd);
+
+  # send a warning if the bind didn't gone well
+  $bind->code && die ("! Failed to bind to LDAP server: ", $bind->error."\n");
+
+  return %hash_result;
+}
+
+
+sub create_branch {
+  my ($ldap, $base, $ou) = @_;
+  $ou =~ m/^ou=([^,]*),?$/ or die "Can’t create branch of unknown type $ou\n";
+  my $branch_add = $ldap->add( "$ou,$base",
+    attr => [
+      'ou'  => $1,
+      'objectClass' =>  'organizationalUnit'
+      ]
+  );
+
+  $branch_add->code && die "! failed to add LDAP's $ou,$base branch: ".$branch_add->error."\n";
+}
+
+sub branch_exists {
+  my ($ldap, $branch) = @_;
+
+  # search for branch
+  my $branch_mesg = $ldap->search (base => $branch, filter => '(objectClass=*)', scope => 'base');
+  if ($branch_mesg->code == 32) {
+    return 0;
+  }
+  $branch_mesg->code && die $branch_mesg->error;
+
+  my @entries = $branch_mesg->entries;
+  return (defined ($entries[0]));
+}
+
+# function that create a directory and copy plugin files in it
+sub create_and_copy_plugin_dir {
+  my ($plugin_dir,$dest_dir) = @_;
+  if ( -e $plugin_dir ){
+    my $dir = dir ($dest_dir);
+    $dir->mkpath() or warn ("! Unable to make ".$dest_dir."\n") if ( !-e $dest_dir);
+    my $files_dirs_copied = rcopy($plugin_dir."/*", $dest_dir);
+  }
+}
+
+# function that remove file
+sub delete_plugin_file {
+  my ($file_path) = @_;
+  if ( -e $file_path ){
+    my $file_deleted = unlink($file_path);
+  }
+}
+
+# function that remove directory
+sub delete_plugin_directory {
+  my ($file_path) = @_;
+  if ( -e $file_path ){
+     #my $files_dirs_copied = rcopy($plugin_dir."/*", $dest_dir);
+  }
+}
+
+# function that Add plugin record
+sub add_plugin_record {
+  # initiate the LDAP connexion
+  my %hash_ldap_param = get_ldap_connexion();
+  my $pathfile=$_[0];
+  my $plugin_info = LoadFile($pathfile);
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  if (!branch_exists($ldap, "$configpluginrdn,ou=fusiondirectory,$base")) {
+    create_branch($ldap, "ou=fusiondirectory,".$base, $configpluginrdn);
+    print "Create plugin branch";
+  }
+
+  my %obj=('objectClass' => ['top','fdPlugin']);
+
+  foreach my $k (keys(%pluginmanagementmapping)) {
+    my @section = split(/:/, $pluginmanagementmapping{$k});
+    if (defined($plugin_info->{$section[0]}->{$section[1]})){
+      $obj{$k} = $plugin_info->{$section[0]}->{$section[1]};
+    }
+  }
+
+  my $dn = "cn=".$plugin_info->{information}->{name}.",".$configpluginrdn.",ou=fusiondirectory,".$base;
+
+  my @options = %obj;
+
+  if (branch_exists($ldap, $dn)) {
+    print "Plugin record exist : ".$dn."\nDeleting it !\n";
+    delete_plugin_record($dn);
+  }
+
+
+  my $mesg = $ldap->add( $dn, attr => \@options );
+  print "Create plugin record\n";
+  if ($mesg->code) {
+    print $dn.": ".$mesg->error." (".$mesg->code.")\n";
+  }
+}
+
+# function that delete plugin record
+sub delete_plugin_record {
+  # initiate the LDAP connexion
+  my $plugin_dn=$_[0];
+  my %hash_ldap_param = get_ldap_connexion();
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  if (!branch_exists($ldap,$plugin_dn)) {
+    exit;
+  }else{
+    my $mesg = $ldap->delete( $plugin_dn);
+
+    if ($mesg->code) {
+      print $plugin_dn.": ".$mesg->error."\n";
+    }
+  }
+}
+
+# function that remove plugin
+sub remove_plugin {
+
+  my %hash_ldap_param = get_ldap_connexion();
+  my $base = $hash_ldap_param{base};
+
+  # check if plugin is set on CLI
+  check_plugin_name_is_set("It's mandatory for deleting it");
+
+  # check if plugin exist inside ldap Tree
+  if ( check_plugin_existence($plugin_name) == -1 ){
+      print $plugin_name." isn't installed !";
+      exit(-1);
+  }
+
+  # check if plugin is used
+  if ( check_plugin_dependencies() == -1 ){
+      print $plugin_name." is a dependancie !";
+      exit(-1);
+  }
+
+
+  my $delete_file = ask_user_input ("Files of plugin".$plugin_name." will be removed !! \nAre you Sure (yes/NO)?\n", "no");
+
+  if ( $delete_file eq "yes" ){
+    # remove files
+    # get all file declared inside plugin
+    my @filelist=get_plugin_files();
+    foreach my $f (@filelist){
+         # if ./addons/ , ./admin/, ./config/ , ./personal/
+         if ( $f =~ /^\.\/admin\// or $f =~ /^\.\/config\// or $f =~ /^\.\/addons\// or $f =~ /^\.\/personal\//) {
+           delete_plugin_file($vars{fd_home}."/plugins/".$f);
+         }
+
+
+        # delete_plugin_file($vars{fd_home}."/plugins/".$f);
+         # if ./html/ , ./ihtml/, ./include/, ./contrib/openldap/ , /contrib/doc/
+         if ( $f =~ /^\.\/html\// or $f =~ /^\.\/ihtml\// or $f =~ /^\.\/include\// or $f =~ /^\.\/contrib\/openldap\//) {
+           delete_plugin_file($vars{fd_home}."/".$f);
+         }
+         # if /contrib/etc/", $vars{fd_config_dir}."/".$plugin."/");
+         if ( $f =~ /^\.\/contrib\/etc\// ){
+           delete_plugin_directory($vars{fd_config_dir}."/".$plugin_name);
+         }
+         # if ./bin/
+         if ( $f =~ /^\.\/bin\// ){
+           my @fileArray = split("\/", $f);
+           delete_plugin_bin("/usr/local/bin/".$fileArray[-1]);
+         }
+
+      }
+    }else {
+      print $plugin_name." files wasn't removed!\n";
+    }
+    my $delete_record = ask_user_input ("Ldap record of plugin".$plugin_name." will be removed !! \nAre you Sure (yes/NO)?\n", "no");
+    if ( $delete_record eq "yes" ){
+    # remove plugins entry inside LDAP tree
+      delete_plugin_record(my $dn = "cn=".$plugin_name.",".$configpluginrdn.",ou=fusiondirectory,".$base);
+    }else {
+      print $plugin_name." ldap record was not deleted!\n";
+    }
+  #finally update FusionDirectory's class.cache and locales
+  print "Scanning and update Class.cache and translations\n";
+  rescan_classes();
+  rescan_i18n();
+}
+
+# function that check if plugin is inserted ldap tree
+sub check_plugin_existence {
+
+  # check if plugin is set on CLI
+  my $plugin_name = $_[0];
+
+  # initiate the LDAP connexion
+  my %hash_ldap_param = get_ldap_connexion();
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  # Search for plugin
+  my $mesg = $ldap->search(
+    base => "$configpluginrdn,ou=fusiondirectory,$base",
+    filter => "(&(objectClass=fdPlugin)(cn=".$plugin_name."))",
+    attrs => ['cn','description']
+  );
+  $mesg->code && die $mesg->error;
+  my @entries = $mesg->entries;
+
+#  print($mesg->code."  ".$mesg->error." ".ref($mesg->code));
+  if ($mesg->count == 1){
+    print("Plugin ".$plugin_name." is declared\n");
+    return(1);
+  }else{
+    print("Plugin ".$plugin_name." is NOT declared\n");
+    return(0);
+  }
+}
+
+# function that check if all requirements are satisfied
+sub check_plugin_dependencies_requirement {
+  my $pathfile=$_[0];
+  my $plugin_info = LoadFile($pathfile);
+
+  # get Fusion Directory version
+  my $fd_version = get_install_version("FD_VERSION");
+
+  # get Minor php version
+  my $php_min_version = get_install_version("PHP_MIN_VERSION");
+  # Check FD version
+  if (version->parse($plugin_info->{'requirement'}->{'fdVersion'}) > version->parse($fd_version)){
+      print "! a newer Fusiondirectory version is needed.\n Plugin need at least ".$plugin_info->{'requirement'}->{'fdVersion'}." (current is ".$fd_version.")\n";
+      exit(-1)
+
+  }
+  # Check PHP version
+  if (version->parse($plugin_info->{'requirement'}->{'phpVersion'}) >= version->parse($php_min_version)){
+      print "! a newer PHP version is needed.\n Plugin need at least ".$plugin_info->{'requirement'}->{'phpVersion'}." (current is ".$php_min_version.")\n";
+      exit(-1)
+
+  }
+  # Check of plugin List
+  foreach my $d (@{$plugin_info->{'requirement'}->{'pluginList'}}) {
+    if ( ! check_plugin_existence($d)){
+      print "! ".$d." is required!! Please install it ! \n";
+      exit(-1)
+    };
+  }
+}
+
+
+# this function check if the plugin specifie is a dependancy of other plugin
+sub check_plugin_dependencies {
+
+  # check if plugin is set on CLI
+  check_plugin_name_is_set("It's mandatory for checking plugin dependency");
+
+  # initiate the LDAP connexion
+  my %hash_ldap_param = get_ldap_connexion();
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  # Search for plugin
+  my $mesg = $ldap->search(
+    base => "$configpluginrdn,ou=fusiondirectory,$base",
+    filter => "(&(objectClass=fdPlugin)(fdPluginReqPluginList=".$plugin_name."))",
+    attrs => ['cn','description']
+  );
+  $mesg->code && die $mesg->error;
+  my @entries = $mesg->entries;
+
+#  print($mesg->code."  ".$mesg->error." ".ref($mesg->code));
+  if ($mesg->count >= 1){
+    print("Plugin ".$plugin_name." is necessary for other plugins\n");
+    foreach my $entry (@entries) {
+      print " Plugin :".$entry->get_value('cn')." - ".$entry->get_value('description')."\n";
+    }
+    return(-1);
+  }else{
+    print("Plugin ".$plugin_name." is NOT necessary for other plugins\n");
+    return(1);
+  }
+
+}
+
+#
+sub check_plugin_name_is_set {
+    if ($plugin_name eq ""){
+      print "--plugin-name is not set as the first parameter. ".$_[0]."\n";
+      exit(-1);
+  }
+}
+
+sub display_plugin_files {
+  # check if plugin exist inside ldap Tree
+  if ( check_plugin_existence($plugin_name) == -1 ){
+      print $plugin_name." isn't installed !";
+      exit(-1);
+  }else{
+    my @filelist=get_plugin_files();
+    foreach my $f (@filelist){
+        print(" - ".$f."\n");
+    }
+  }
+}
+
+#AGA
+sub get_plugin_files {
+  # check if plugin is set on CLI
+  check_plugin_name_is_set("It's mandatory for getting file list");
+  # initiate the LDAP connexion
+  my %hash_ldap_param = get_ldap_connexion();
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  # Search for plugin
+  my $mesg = $ldap->search(
+    base => "$configpluginrdn,ou=fusiondirectory,$base",
+    filter => "(&(objectClass=fdPlugin)(cn=".$plugin_name."))",
+    attrs => ['fdPluginContentFileList']
+
+  );
+  $mesg->code && die $mesg->error;
+  my @entries = $mesg->entries;
+
+  #  print($mesg->code."  ".$mesg->error." ".ref($mesg->code));
+  if ($mesg->count >= 1){
+    print("Plugin ".$plugin_name." contains following files\n");
+    foreach my $entry (@entries) {
+      return($entry->get_value('fdPluginContentFileList'));
+    }
+  }
+}
+
+# set register only flag
+sub only_register {
+  $plugin_register_only = 1;
+  install_plugin();
+}
+
+#AGA
+sub list_plugins {
+  # initiate the LDAP connexion
+  my %hash_ldap_param = get_ldap_connexion();
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  my @pluginattrs=('cn','description','fdPluginInfoAuthor','fdPluginInfoVersion','fdPluginInfoHomeUrl','fdPluginInfoStatus','fdPluginInfoSupport');
+
+  # Search for DHCP configurations
+  my $mesg = $ldap->search(
+    base => "$configpluginrdn,ou=fusiondirectory,$base",
+    filter => "(objectClass=fdPlugin)",
+    attrs => \@pluginattrs
+  );
+  $mesg->code && die $mesg->error;
+
+  my @entries = $mesg->entries;
+  print "There are ".$mesg->count." Plugins configurations in the LDAP\n";
+
+  foreach my $entry (@entries) {
+    print " Plugin :".$entry->get_value('cn')."\n";
+    foreach my $val (@pluginattrs) {
+      my @section = split(/:/, $pluginmanagementmapping{$val});
+      my $value="N/A";
+      if (defined ($entry->get_value($val))){
+          $value = $entry->get_value($val);
+      }
+      print "   - ".$section[1]."\t: ".$value."\n";
+    }
+  }
+
+}
+
+
+
+
+# function that install all the FD's plugins from a directory
+sub install_plugin {
+  # ask for the plugins archive
+  if  ($plugins_archive eq ""){
+    $plugins_archive = ask_user_input ("Where is your plugins archive or folder?");
+  }
+  die ("! ".$plugins_archive." doesn't exists") if (!-e $plugins_archive);
+
+  my $dir;
+  if (-d $plugins_archive) {
+    $dir = dir ($plugins_archive);
+  } else {
+    # check the archive format
+    $plugins_archive =~ /^.*\/(.*).tar.gz$/;
+    my $name = $1 or die ("! Unkwnow archive $plugins_archive");
+
+    # where the extract files will go
+    my $tmp_plugins_dir = "/tmp";
+
+    print ("Installing plugins into $vars{fd_home}, please wait...\n");
+
+    # extract the plugins archive
+    my $archive = Archive::Extract->new (archive => $plugins_archive);
+    my $extract = $archive->extract( to => "$tmp_plugins_dir" ) or die ("! Unable to extract $plugins_archive\n");
+
+    $dir = dir ($tmp_plugins_dir."/".$name);
+  }
+  #AGA if no plugin is specified, a list is suggested
+  my @plugins_to_install=();
+  # List non-hidden children, grep directories, and sort by name
+  my @plugins =
+      sort {$a->basename cmp $b->basename}
+      grep {$_->is_dir}
+      $dir->children(no_hidden => 1);
+
+  if  ($plugin_name eq ""){
+    print "Available plugins:\n";
+
+    my $i = 1;
+    foreach my $plugin_path (@plugins) {
+      print $i++.":".$plugin_path->basename."\n";
+    }
+
+    my $user_input = ask_user_input("Which plugins do you want to install (use \"all\" to install all plugins)?");
+    @plugins_to_install = split(/\s/, $user_input);
+
+  }else{
+      if (-e $dir."/".$plugin_name){
+        push @plugins_to_install, $plugin_name;
+      }else{
+        print "! ".$plugin_name." folder don't exist (".$dir."/".$plugin_name.")\n";
+        exit;
+      }
+  }
+
+
+  chdir ($dir) or die ("! Unable to move to $dir\n");
+  my $i = 0;
+  foreach my $plugin_path (@plugins) {
+    $i++;
+
+    my $plugin = $plugin_path->basename;
+
+    if (grep {($_ eq "all") or ($_ eq $i) or ($_ eq $plugin)} @plugins_to_install) {
+      print "Installing plugin $plugin\n";
+    } else {
+      next;
+    }
+
+
+    # insert add plugin if control.yaml is present
+    if  (-e $plugin_path."/control.yaml") {
+
+      check_plugin_dependencies_requirement($plugin_path."/control.yaml");
+      # add conf inside LDAP TREE
+      add_plugin_record($plugin_path."/control.yaml");
+
+      if ( ! $plugin_register_only ) {
+        # copy addons into plugins
+        create_and_copy_plugin_dir($plugin_path."/addons/", $vars{fd_home}."/plugins/addons/");
+
+        # copy admin into plugins
+        create_and_copy_plugin_dir($plugin_path."/admin/", $vars{fd_home}."/plugins/admin/");
+
+        # copy config into plugins
+        create_and_copy_plugin_dir($plugin_path."/config/", $vars{fd_home}."/plugins/config/");
+
+        # copy personal into plugins
+        create_and_copy_plugin_dir($plugin_path."/personal/", $vars{fd_home}."/plugins/personal/");
+
+        # copy extra HTML and images
+        create_and_copy_plugin_dir($plugin_path."/html/", $vars{fd_home}."/html/");
+
+        # copy extra theme templates
+        create_and_copy_plugin_dir($plugin_path."/ihtml/", $vars{fd_home}."/ihtml/");
+
+        # copy includes
+        create_and_copy_plugin_dir($plugin_path."/include/", $vars{fd_home}."/include/");
+
+        # copy ldap schema
+        create_and_copy_plugin_dir($plugin_path."/contrib/openldap/", $vars{fd_home}."/contrib/openldap/");
+
+        # copy etc files
+        create_and_copy_plugin_dir($plugin_path."/contrib/etc/", $vars{fd_config_dir}."/".$plugin."/");
+
+        # copy doc
+        create_and_copy_plugin_dir($plugin_path."/contrib/doc/", $vars{fd_home}."/contrib/doc/");
+
+        # copy binary
+        create_and_copy_plugin_dir($plugin_path."/bin/", "/usr/local/bin/");
+
+        # copy the locales
+        create_and_copy_plugin_dir($plugin_path."/locale/", $vars{fd_home}."/locale/plugins/".$plugin."/locale/");
+      }
+    }else{
+      print "No control.yaml file is present, plugin won't be installed\n"
+    }
+  }
+
+
+  #finally update FusionDirectory's class.cache and locales
+  print "Scanning and update Class.cache and translations\n";
+  rescan_classes();
+  rescan_i18n();
+}
+
+# Get LDAP attributes which have been deprecated
+sub get_deprecated {
+  # initiate the LDAP connexion
+  my %hash_ldap_param = get_ldap_connexion();
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  my $schema_info = $ldap->schema();
+
+  my @attributes      = $schema_info->all_attributes();
+  my @obsolete_attrs  = ();
+  foreach my $attribute (@attributes) {
+    if ($attribute->{'obsolete'}) {
+      push @obsolete_attrs, $attribute;
+    }
+  }
+
+  my @ocs               = $schema_info->all_objectclasses();
+  my @obsolete_classes  = ();
+  foreach my $oc (@ocs) {
+    if ($oc->{'obsolete'}) {
+      push @obsolete_classes, $oc;
+    }
+  }
+
+  return (\@obsolete_attrs, \@obsolete_classes);
+}
+
+# List LDAP attributes which have been deprecated
+sub list_deprecated {
+  my ($obsolete_attrs, $obsolete_classes) = get_deprecated();
+
+  print "Deprecated attributes:\n";
+  foreach my $attribute (@$obsolete_attrs) {
+    printf(" %-30s\t%-60s\t- %s\n", $attribute->{'name'}, '('.$attribute->{'desc'}.')', $attribute->{'oid'});
+  }
+
+  print "Deprecated objectClasses:\n";
+  foreach my $oc (@$obsolete_classes) {
+    printf(" %-30s\t%-60s\t- %s\n", $oc->{'name'}, '('.$oc->{'desc'}.')', $oc->{'oid'});
+  }
+}
+
+sub set_config_var {
+  my ($var, $value) = @_;
+  if (!($var =~ m/^fd/)) {
+    $var = "fd$var";
+  }
+
+  print "Setting configuration var $var to $value\n";
+
+  # initiate the LDAP connexion
+  my %hash_ldap_param = get_ldap_connexion();
+
+  # LDAP's connection's parameters
+  my $base = $hash_ldap_param{base};
+  my $ldap = $hash_ldap_param{ldap};
+
+  my $result = $ldap->modify (
+    "$configrdn,$base",
+    replace => {
+      $var  => $value
+    }
+  );
+  $result->code && warn "! failed to set value for '".$var."' - ".$result->error_name.": ".$result->error_text;
+}
+
+
+sub get_install_version {
+  my $fd_var=$_[0];
+  my $variables_common_path = "$vars{fd_home}/include/variables_common.inc";
+  if (-e $variables_common_path) {
+    open(my $vars, q{<}, $variables_common_path) || die ("Could not open $variables_common_path");
+    while(<$vars>) {
+      if ($_ =~ m/^define\(["']$fd_var["'], ["']([^']+)["']\);/) {
+        my @num_val=split("-",$1);
+        return $num_val[0];
+        last;
+      }
+    }
+    close($vars);
+  } else {
+    print "File $variables_common_path does not exists, can’t find out FusionDirectory version\n";
+  }
+}
+
+sub show_version {
+  my $fd_version = get_install_version('FD_VERSION');
+  print "FusionDirectory version is ".$fd_version."\n";
+}
+
+# function that set useful vars based on user specified folders and files
+sub set_vars {
+  $fd_config        = $vars{fd_config_dir}."/".$vars{config_file};
+  $fd_secrets       = $vars{fd_config_dir}."/".$vars{secrets_file};
+  $locale_dir       = $vars{fd_home}."/".$vars{locale_dir};
+  $class_cache      = $vars{fd_cache}."/".$vars{class_cache};
+  $locale_cache_dir = $vars{fd_cache}."/".$vars{locale_cache_dir};
+  $tmp_dir          = $vars{fd_cache}."/".$vars{tmp_dir};
+  $fai_log_dir      = $vars{fd_cache}."/".$vars{fai_log_dir};
+  $template_dir     = $vars{fd_cache}."/".$vars{template_dir};
+  my $supann_dir    = $vars{fd_cache}."/supann";
+
+  @root_config_dirs   = ( $vars{fd_home}, $vars{fd_config_dir} );
+  @apache_config_dirs = ( $vars{fd_spool_dir}, $vars{fd_cache}, $tmp_dir, $fai_log_dir,
+                          $template_dir );
+  @config_dirs = ( @root_config_dirs, @apache_config_dirs );
+}
+
+
+#################### main function #####################
+#die if the user is not root
+die ("! You have to run this script as root\n") if ($<!=0);
+
+  my @vars_keys = keys %vars;
+
+  # $commands{<cli-option>} = [<description>, <function>, <needs-ldap-config>];
+  my %commands = ();
+  $commands{"--update-cache"}         = ["Updating class.cache",                          \&rescan_classes];
+  $commands{"--update-locales"}       = ["Updating translations",                         \&rescan_i18n];
+  $commands{"--check-plugin-exist"}   = ["Checking if plugins exist",                     \&check_plugin_existence];
+  $commands{"--install-plugin"}       = ["Installing FusionDirectory's plugins",            \&install_plugin];
+  $commands{"--only-register"}        = ["Only register inside LDAP",          \&only_register];
+  $commands{"--remove-plugin"}        = ["Delete one plugins", \&remove_plugin];
+  $commands{"--list-plugins"}         = ["List installed FusionDirectory plugins",        \&list_plugins];
+  $commands{"--show-version"}         = ["Show FusionDirectory version from variables_common.inc", \&show_version];
+  $commands{"--set-VAR=value"}        = ["Set the variable VAR to value see --list-vars", \&die]; # Won't be called because it contains uppercase
+  $commands{"--show-config"}          = ["Show an LDAP dump of the FusionDirectory configuration", \&show_ldap_config];
+  $commands{"--set-config-VAR=value"} = ["Set the value in LDAP of a configuration field",\&set_config_var];
+
+  my $usage = 0;
+
+  set_vars();
+
+  foreach my $arg ( @ARGV ) {
+    if (( $arg =~ m/^--set-(.*)=(.*)$/ ) && (grep {$_ eq lc($1)} @vars_keys)) {
+      $vars{lc($1)} = $2;
+      print "Setting ".lc($1)." to $2\n";
+      set_vars();
+    } elsif ( $arg =~ m/^--set-config-(.*)=(.*)$/ ) {
+      set_config_var($1, $2);
+    } elsif ( $arg =~ m/^--plugin-name=(.*)$/ ) {
+    # AGA add plugin name parameter
+      $plugin_name=$1;
+      print "plugin ".$plugin_name." will be used\n";
+    }elsif ( $arg =~ m/^--plugins-archive=(.*)$/ ) {
+    # AGA add plugin parameteres
+      $plugins_archive=$1;
+      print "Plugins folder ".$plugins_archive." will be used\n";
+    } elsif ( defined $commands { lc ( $arg ) } ) {
+      my @command = @{ $commands{ $arg } };
+      if ((defined $command[2]) && $command[2]) {
+        read_ldap_config();
+      }
+      print( $command[0]."\n" );
+      $command[1]();
+    } elsif ( ( lc($arg) eq "--help" ) || ( lc($arg) eq "-h" ) ) {
+      print ( "\nCommands:\n" );
+      while ( my ( $key,$value ) = each %commands ) {
+        print ( "$key\t".$value->[0]."\n" );
+      }
+      print ("--yes\t\t\tAlways answer yes to yes/no questions\n");
+      print ("--help\t\t\tShows this help\n\n");
+
+    } elsif (( lc($arg) eq "--yes" ) || ( lc($arg) eq "-y" )) {
+      $yes_flag = 1;
+    } else {
+      print ("\nInvalid argument\n\n");
+      $usage = 1;
+    }
+  }
+
+
+  if( $usage || ( @ARGV <= 0 ) ) {
+    print ( "Usage : $0 [--yes]" );
+    foreach my $command ( keys ( %commands )) {
+      print ( " [$command]" );
+    }
+    print "\n\n";
+  }
+exit 0;
+
+__END__
+
+=head1 NAME
+
+fusiondirectory-plugin-manager - FusionDirectory plugin management tool
+
+=head1 DESCRIPTION
+
+This script is designed to manage plugins on your FusionDirectory/LDAP architecture.
+It manages only community plugin at this moment, need a control.yaml
+
+=head2 Options
+
+=over 4
+
+=item --update-cache
+
+This option update the /var/cache/fusiondirectory/class.cache file. Which contain PHP classes used in FusionDirectory, and their location.
+
+=item --update-locales
+
+This option update internalization, by generating a new .mo locales file for each language, with every .po files it found.
+Needs I<msgcat> and I<msgfmt> to be installed.
+
+=item --list-plugins
+
+This option will show some infirmation per plugins installed by reading LDAP tree. See pluginsmanager webpage
+
+=item --show-version
+
+This option will parse the file variables_common.inc of FusionDirectory to find out which version of FusionDirectory is installed.
+
+=item --set-VAR=variable
+
+This option will change the variable for the FusionDirectory installation. it is only useful with --install-directories and for people installing from sources.
+
+=item --yes
+
+This flag will answer "yes" to every yes/no question asked by the script
+
+=item --plugin-name
+
+This flag with set the plugin name on command line
+
+=item --plugins-archive
+
+Path of the directory wich contains plugin folder like : <path of --plugins-archive>/<--plugin-name folder>
+
+=item --set-fd_home
+
+Set Home directory of FusionDirectory
+
+=item --remove-plugin
+
+Delete plugin, which delete registration inside LDAP tree and delete files, all actions have to be confirmed.
+
+=item --show-plugin-files
+
+Show list of files declared for the plugin.
+
+=item --register-plugin
+
+Set plugin only information inside LDAP from control.yaml file
+
+=item --install-plugin
+
+This option will install the plugin from a tar.gz of the plugin or a specific folder. This option is intended for people wanting to install from the sources.
+A control.yaml field MUST be provided per each plugins in order to add the plugin . See pluginsmanager webpage
+
+=back
+
+=head1 EXAMPLE
+
+  Install plugin "notes" from archive folder "/usr/local/src/fd-plugins/" to FD instance stored in folder "/usr/local/share/fusiondirectory"
+
+  root@fd-14-dev:/usr/local/src# fusiondirectory-plugin-manager --plugin-name=notes --set-fd_home=/usr/local/share/fusiondirectory  --plugins-archive=/usr/local/src/fd-plugins/ --install-plugin
+
+  Remove plugin "notes" from FD instance stored in folder "/usr/local/share/fusiondirectory"
+
+  fusiondirectory-plugin-manager --plugin-name=notes --set-fd_home=/usr/local/share/fusiondirectory  --remove-plugin
+
+  List all plugin installed
+
+  fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory  --list-plugins
+
+  Only register control.yaml of plugin
+
+  fusiondirectory-plugin-manager --plugin-name=notes --set-fd_home=/usr/local/share/fusiondirectory  --plugins-archive=/usr/local/src/fd-plugins/ --only-register
+
+
+=head1 BUGS
+
+Please report any bugs, or post any suggestions, to the fusiondirectory mailing list fusiondirectory-users or to
+
+=head1 AUTHORS
+
+Benjamin Carpentier
+
+Come Bernigaud
+
+Antoine Gallavardin
+
+=head1 LICENCE AND COPYRIGHT
+
+This code is part of FusionDirectory (http://www.fusiondirectory.org/)
+
+=over 2
+
+=item Copyright (C) 2011-2018  FusionDirectory
+
+=back
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+=cut

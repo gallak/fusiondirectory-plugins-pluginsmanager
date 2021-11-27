@@ -1,0 +1,50 @@
+information:
+  name : pluginsmanager
+  description : "This plugins provide a way to manage plugins trough command line and increase plugins installation from other contributor"
+  version : "0.1"
+  author : ['antoine.gallavardin@free.fr']
+  homeUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager"
+  ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/issues"
+  discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/wiki"
+  iconUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png"
+  downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/archive/refs/heads/main.zip"
+  schemaUrl : "https://schemas.fusiondirectory.info/"
+  status : DEV
+  screenshotUrl:
+   - https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png
+  logoUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/logo.png"
+  tag: ["manager","administration","plugin" ]
+  support :
+    - community
+requirement:
+  fdVersion : 1.4
+  phpVersion : 7.2.0
+content :
+  phpClassList : ['pluginsManager']
+  ldapObjectList : ['fdPlugin']
+  ldapAttributeList :
+    - 'fdPluginInfoAuthor'
+    - 'fdPluginInfoVersion'
+    - 'fdPluginInfoHomeUrl'
+    - 'fdPluginInfoTicketUrl'
+    - 'fdPluginInfoDiscussionUrl'
+    - 'fdPluginInfoIconUrl'
+    - 'fdPluginInfoSchemaUrl'
+    - 'fdPluginReqFdVersion'
+    - 'fdPluginReqPhpVersion'
+    - 'fdPluginReqPluginList'
+    - 'fdPluginContentPhpClass'
+    - 'fdPluginContentLdapObject'
+    - 'fdPluginContentLdapAttributes'
+    - 'fdPluginContentFileList'
+    - 'fdPluginInfoStatus'
+    - 'fdPluginInfoFormat'
+    - 'fdPluginInfoDownloadUrl'
+    - 'fdPluginInfoSupport'
+    - 'fdPluginInfoTags'
+    - 'fdPluginInfoLogoUrl'
+    - 'fdPluginInfoScreenshotUrl'
+  fileList :
+  - './addons/dashboard/plugins_list.tpl'
+  - './addons/dashboard/class_pluginsManager.inc'
+
