@@ -11,7 +11,7 @@ information:
   schemaUrl : "https://schemas.fusiondirectory.info/"
   status : DEV
   screenshotUrl:
-   - https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png
+   - https://raw.githubusercontent.com/gallak/fusiondirectory-plugins-pluginsmanager/main/contrib/doc/capture1.png
   logoUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/logo.png"
   tag: ["manager","administration","plugin" ]
   support :
