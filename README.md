@@ -38,7 +38,7 @@ There is 4 parts:
 | name | mandatory | identifier of plugin (small string) |
 | description | mandatory | description of plugin (long string) |
 | version | mandatory | version of plugin (small string like X.Y)|
-| author | mandatory | Array of author(s) mail address|
+| authors | mandatory | Array of author(s) mail address|
 | status | mandatory | "Development" or "Stable"|
 | screenshotUrl | recommended | Array of Url of screenshot file ( png/gif/jpg)|
 | logoUrl | recommended | one url linke to the logo file|
@@ -52,7 +52,7 @@ information:
   name : notes
   description : "This plugins provide a way to add some notes per each Fusion Directory Object"
   version : "0.1"
-  author : 
+  authors :
     - "author@domain.fr"
   status : Development
   screenshotUrl:
@@ -68,7 +68,7 @@ information:
 #### Syntax
 
 | keyword | community      | pro | description |
-| ---- | ----------------- | ---- | ---- | 
+| ---- | ----------------- | ---- | ---- |
 | homeUrl | mandatory      | mandatory | Link to the homepage of plugin                                               |
 | ticketUrl | recommended  | mandatory | Link to the ticket system of plugin                                          |
 | discussionUrl| recommended| mandatory | Link to the discussion page of plugin chat / forum                          |
