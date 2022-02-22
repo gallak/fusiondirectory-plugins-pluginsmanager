@@ -56,21 +56,25 @@ class pluginsManager extends simplePlugin
     global $config;
     $ldap = $config->get_ldap_link();
     $ldap->cd($config->current['BASE']);
-    $ldap->search('(objectClass=fdPlugin)', ['cn','description','fdPluginInfoVersion','fdPluginInfoAuthor','fdPluginInfoStatus','fdPluginReqPluginList']);
+    $ldap->search('(objectClass=fdPlugin)', ['cn','description','fdPluginInfoVersion','fdPluginInfoAuthors','fdPluginInfoStatus','fdPluginInfoOrigin','fdPluginSupportProvider','fdPluginSupportHomeUrl','fdPluginReqPlugin']);
 
     $id   = 'pluginsStats';
     $div  = new divSelectBox('rows'.$id);
     $smarty = get_smarty();
     $div->setHeight(300);
-    $div->setHeaders([_('Nom'), _('Description'), _('Version'),_('Author'),_('Status'),_('Dependencies')]);
+    $div->setHeaders([_('Nom'), _('Description'), _('Version'),_('Authors'),_('Status'),_('Origin'),_('Provider'),_('Dependencies'),_('Link')]);
     while ($plugin = $ldap->fetch()) {
       $fields = [
         ['string' => $plugin['cn'][0]],
         ['string' => $plugin['description'][0]],
         ['string' => $plugin['fdPluginInfoVersion'][0]],
-        ['string' => $plugin['fdPluginInfoAuthor'][0]],
+        ['string' => $plugin['fdPluginInfoAuthors'][0]],
         ['string' => $plugin['fdPluginInfoStatus'][0]],
-        ['string' => $plugin['fdPluginReqPluginList'][0]],
+        ['string' => $plugin['fdPluginInfoOrigin'][0]],
+        ['string' => $plugin['fdPluginSupportProvider'][0]],
+        ['string' => $plugin['fdPluginReqPlugin'][0]],
+        ['string' => $plugin['fdPluginSupportHomeUrl'][0]],
+
       ];
       $div->addEntry($fields);
     }

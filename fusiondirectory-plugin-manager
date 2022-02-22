@@ -111,7 +111,7 @@ my %pluginmanagementmapping = (
   "fdPluginInfoTags"                => "information:tags",
   "fdPluginInfoLicence"             => "information:license",
   "fdPluginInfoOrigin"              => "information:origin",
-  "fdPluginSupportProvider"         => "support:name",
+  "fdPluginSupportProvider"         => "support:provider",
   "fdPluginSupportHomeUrl"          => "support:homeUrl",
   "fdPluginSupportTicketUrl"        => "support:ticketUrl",
   "fdPluginSupportDiscussionUrl"    => "support:discussionUrl",
@@ -120,7 +120,7 @@ my %pluginmanagementmapping = (
   "fdPluginSupportContractUrl"      => "support:contractUrl",
   "fdPluginReqFdVersion"            => "requirement:fdVersion",
   "fdPluginReqPhpVersion"           => "requirement:phpVersion",
-  "fdPluginReqPlugins"              => "requirement:pluginList",
+  "fdPluginReqPlugins"              => "requirement:plugins",
   "fdPluginContentPhpClass"         => "content:phpClassList",
   "fdPluginContentLdapObject"       => "content:ldapObjectList",
   "fdPluginContentLdapAttributes"   => "content:ldapAttributeList",
@@ -339,8 +339,7 @@ sub rescan_i18n {
   }
 }
 
-sub get_locations_from_config_file
-{
+sub get_locations_from_config_file{
   my $twig = XML::Twig->new();
   $twig->safe_parsefile($fd_config) or die("There is an error in $fd_config XML code: ".(split /\n/, $@)[1]."\n");
   my @locs = $twig->root->first_child('main')->children('location');
@@ -528,7 +527,7 @@ sub delete_plugin_directory {
   }
 }
 
-# function that Add plugin record
+# function that add plugin record
 sub add_plugin_record {
   # initiate the LDAP connexion
   my %hash_ldap_param = get_ldap_connexion();
@@ -608,7 +607,7 @@ sub remove_plugin {
 
   # check if plugin is used
   if ( check_plugin_dependencies() == -1 ){
-      print $plugin_name." is a dependancie !";
+      print $plugin_name." is a dependencie !";
       exit(-1);
   }
 
@@ -713,7 +712,7 @@ sub check_plugin_dependencies_requirement {
 
   }
   # Check of plugin List
-  foreach my $d (@{$plugin_info->{'requirement'}->{'pluginList'}}) {
+  foreach my $d (@{$plugin_info->{'requirement'}->{'plugins'}}) {
     if ( ! check_plugin_existence($d)){
       print "! ".$d." is required!! Please install it ! \n";
       exit(-1)
@@ -738,7 +737,7 @@ sub check_plugin_dependencies {
   # Search for plugin
   my $mesg = $ldap->search(
     base => "$configpluginrdn,ou=fusiondirectory,$base",
-    filter => "(&(objectClass=fdPlugin)(fdPluginReqPluginList=".$plugin_name."))",
+    filter => "(&(objectClass=fdPlugin)(fdPluginReqPlugins=".$plugin_name."))",
     attrs => ['cn','description']
   );
   $mesg->code && die $mesg->error;
@@ -779,7 +778,6 @@ sub display_plugin_files {
   }
 }
 
-#AGA
 sub get_plugin_files {
   # check if plugin is set on CLI
   check_plugin_name_is_set("It's mandatory for getting file list");
@@ -824,7 +822,7 @@ sub list_plugins {
   my $base = $hash_ldap_param{base};
   my $ldap = $hash_ldap_param{ldap};
 
-  my @pluginattrs=('cn','description','fdPluginInfoAuthor','fdPluginInfoVersion','fdPluginInfoHomeUrl','fdPluginInfoStatus','fdPluginInfoSupport');
+  my @pluginattrs=('cn','description','fdPluginInfoAuthors','fdPluginInfoVersion','fdPluginSupportHomeUrl','fdPluginInfoStatus','fdPluginSupportProvider','fdPluginInfoOrigin');
 
   # Search for DHCP configurations
   my $mesg = $ldap->search(
@@ -1111,7 +1109,7 @@ die ("! You have to run this script as root\n") if ($<!=0);
   $commands{"--set-VAR=value"}        = ["Set the variable VAR to value see --list-vars", \&die]; # Won't be called because it contains uppercase
   $commands{"--show-config"}          = ["Show an LDAP dump of the FusionDirectory configuration", \&show_ldap_config];
   $commands{"--set-config-VAR=value"} = ["Set the value in LDAP of a configuration field",\&set_config_var];
-
+  $commands{"--show-plugin-files"}    = ["Display files used by plugins",        \&display_plugin_files];
   my $usage = 0;
 
   set_vars();
