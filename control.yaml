@@ -1,49 +1,55 @@
-information:
+information :
   name : pluginsmanager
   description : "This plugins provide a way to manage plugins trough command line and increase plugins installation from other contributor"
   version : "0.1"
-  author : ['antoine.gallavardin@free.fr']
+  authors :
+    - "antoine.gallavardin@free.fr"
+  status : developpement
+  screenshotUrl :
+   - https://raw.githubusercontent.com/gallak/fusiondirectory-plugins-pluginsmanager/main/contrib/doc/capture1.png
+  logoUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/logo.png"
+  tags : ["manager","administration","plugin" ]
+  license : "GPLv2"
+  origin : "source"
+
+support :
+  provider : community
   homeUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager"
   ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/issues"
   discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/wiki"
-  iconUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png"
-  downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/archive/refs/heads/main.zip"
+  downloadUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/archive/refs/heads/main.zip"
   schemaUrl : "https://schemas.fusiondirectory.info/"
-  status : DEV
-  screenshotUrl:
-   - https://raw.githubusercontent.com/gallak/fusiondirectory-plugins-pluginsmanager/main/contrib/doc/capture1.png
-  logoUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/logo.png"
-  tag: ["manager","administration","plugin" ]
-  support :
-    - community
-requirement:
+
+requirement :
   fdVersion : 1.4
   phpVersion : 7.2.0
+
 content :
   phpClassList : ['pluginsManager']
   ldapObjectList : ['fdPlugin']
   ldapAttributeList :
-    - 'fdPluginInfoAuthor'
+  fdPluginContentFileList :
+    - 'fdPluginContentLdapAttributes'
+    - 'fdPluginContentLdapObject'
+    - 'fdPluginContentPhpClass'
+    - 'fdPluginInfoAuthors'
+    - 'fdPluginInfoLicence'
+    - 'fdPluginInfoLogoUrl'
+    - 'fdPluginInfoOrigin'
+    - 'fdPluginInfoScreenshotUrl'
+    - 'fdPluginInfoStatus'
+    - 'fdPluginInfoTags'
     - 'fdPluginInfoVersion'
-    - 'fdPluginInfoHomeUrl'
-    - 'fdPluginInfoTicketUrl'
-    - 'fdPluginInfoDiscussionUrl'
-    - 'fdPluginInfoIconUrl'
-    - 'fdPluginInfoSchemaUrl'
     - 'fdPluginReqFdVersion'
     - 'fdPluginReqPhpVersion'
-    - 'fdPluginReqPluginList'
-    - 'fdPluginContentPhpClass'
-    - 'fdPluginContentLdapObject'
-    - 'fdPluginContentLdapAttributes'
-    - 'fdPluginContentFileList'
-    - 'fdPluginInfoStatus'
-    - 'fdPluginInfoFormat'
-    - 'fdPluginInfoDownloadUrl'
-    - 'fdPluginInfoSupport'
-    - 'fdPluginInfoTags'
-    - 'fdPluginInfoLogoUrl'
-    - 'fdPluginInfoScreenshotUrl'
+    - 'fdPluginReqPlugin'
+    - 'fdPluginSupportContractUrl'
+    - 'fdPluginSupportDiscussionUrl'
+    - 'fdPluginSupportDownloadUrl'
+    - 'fdPluginSupportHomeUrl'
+    - 'fdPluginSupportProvider'
+    - 'fdPluginSupportSchemaUrl'
+    - 'fdPluginSupportTicketUrl'
   fileList :
   - './addons/dashboard/plugins_list.tpl'
   - './addons/dashboard/class_pluginsManager.inc'
