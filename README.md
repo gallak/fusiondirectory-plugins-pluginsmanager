@@ -1,7 +1,7 @@
 # fusiondirectory-plugins-pluginsmanager
 
 This plugins is designed to manage list of plugin installed on your Fusiondirectory
-It could check 
+It could check
   * PHP objectClass
   * Ldap schema
   * show information about plugin (as author, version, compatibility)
@@ -14,45 +14,129 @@ There is not simple way to list availbale and enable plugins
 A yaml file must be created for each plugins in the root folder with the following name "control.yaml"
 This yaml file should be imported inside FD trough the `fusiondirectoy-plugin-manager` command provided.
 This importation must create a record inside LDAP tree a sub ou inside fusiondirectory called `ou=plugins`
-There one entry per plugins installed
+There one entry per plugins installed.
+This file is used for adding plugin inside the FusionDirectory Market
 
 
 ## Yaml file
-### Example
 
+### Global information
+The control is inspired by Debian control file used for packaging.
+There is 4 parts:
+
+  * information : Mandatory for defining the plugin and register the plugin inside the Fusiondirectory market and current Fusiondirectory instance.
+  * support : indication is mandatory, content must corresponding to the support provided : community is a reserved word for non-company support.
+  * requirement : indication is optionnal but it's encouraged to fill  it
+  * content : optionnal informations wich are used for installing / checking installation / removing plugin
+
+### Section `information`
+
+#### Syntax
+
+| keyword | presence | description |
+| ---- | ---- | ---- |
+| name | mandatory | identifier of plugin (small string) |
+| description | mandatory | description of plugin (long string) |
+| version | mandatory | version of plugin (small string like X.Y)|
+| author | mandatory | Array of author(s) mail address|
+| status | mandatory | "Development" or "Stable"|
+| screenshotUrl | recommended | Array of Url of screenshot file ( png/gif/jpg)|
+| logoUrl | recommended | one url linke to the logo file|
+| tag | recommended | Array of tag uses for sorted plugins in market|
+| license | mandatory | identifier of the license used like : GPLv2|
+| origin | mandatory | "Source" or "Package", it's used by the install script, if Package is specified, the script won't install/remove the plugin|
+
+#### Example
 ```
 information:
   name : notes
-  description : "plugings which allow user to add some notes on eache FD object"
+  description : "This plugins provide a way to add some notes per each Fusion Directory Object"
   version : "0.1"
-  author : ['antoine.gallavardin@free.fr']
-  homeUrl : "https://github.com/gallak/fusiondirectory-plugins-notes"
-  ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/issues"
-  discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/wiki"
-  iconUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/icon.png"
-  downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-notes.tgz"
-  schemaUrl : "https://schemas.fusiondirectory.info/"
-  status : dev / beta / stable
+  author : 
+    - "author@domain.fr"
+  status : Development
   screenshotUrl:
-   - https://url1
-   - https://url1
-  logoUrl : "logUrl"
-  tag: ["note", ]
-  supportby : 
+   - https://raw.githubusercontent.com/gallak/fusiondirectory-plugins-notes/main/contrib/doc/capture1.png
+  logoUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/logo.png"
+  tag: ["information","notes","plugin" ]
+  license: "GPLv2"
+  origin: "source"
+```
+
+### Section `support`
+
+#### Syntax
+
+| keyword | community      | pro | description |
+| ---- | ----------------- | ---- | ---- | 
+| homeUrl | mandatory      | mandatory | Link to the homepage of plugin                                               |
+| ticketUrl | recommended  | mandatory | Link to the ticket system of plugin                                          |
+| discussionUrl| recommended| mandatory | Link to the discussion page of plugin chat / forum                          |
+| iconUrl | recommended | mandatory | Link to the icon of plugin |
+| downloadUrl  | mandatory | mandatory | Link to the archive of the plugin                                            |
+| schemaUrl | recommended  | mandatory | Link to the LDAP schema used by plugin                                       |
+| contractUrl | none       | mandatory | Link to the company page wich proposed professionnal support for this plugin |
+
+
+#### example of community support section
+```
+support:
+  community:
+    homeUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager"   <== MANDATORY
+    ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/issues"
+    discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/wiki"
+    iconUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png"
+    downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/archive/refs/heads/main.zip"  <== MANDATORY
+    schemaUrl : "https://schemas.fusiondirectory.info/"
+```
+#### example of professional support section
+```
+  fusiondirectory:
+    homeUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager"   <== MANDATORY
+    ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/issues" <== MANDATORY
+    discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/wiki"  <== MANDATORY
+    iconUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png" <== MANDATORY
+    downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/archive/refs/heads/main.zip" <== MANDATORY
+    schemaUrl: "https://schemas.fusiondirectory.info/" <== MANDATORY
+    contractUrl: https://www.fusiondirectory.org/abonnements-fusiondirectory/ <== MANDATORY
+```
+
+### Section `requirement`
+
+| keyword | presence | description |
+| -------- | ---- | ---- |
+| fdVersion| mandatory | Minimal version  of FusionDirectory need for this plugin (small string)|
+| phpVersion | mandatory | Minimal version  of PHP need for this plugin (small string)          |
+
+
+#### example
+```
 requirement:
   fdVersion : 1.4
-  phpVersion : 7.3
-  pluginList : []
-content :
+  phpVersion : 7.2.0
+```
+
+### Section `content`
+
+This section is optionnal.
+
+| keyword | presence | description |
+| ----------- | ---- | ---- |
+| phpClassList| mandatory | PHP object classe used inside plugin          |
+| ldapObjectList   | mandatory | LDAP object classe needed by the plugin  |
+| ldapAttributeList| mandatory | LDAP Attributes list needed by the plugin|
+| fileList         | mandatory | List of file used byt the plugins        |
+
+#### Example
+```
   phpClassList : ['notes']
   ldapObjectList : ['fdNotesObject']
   ldapAttributeList : ['fdNotes']
   fileList :
-  - './admin/systems/notes/class_notes.inc'```
-
+  - './admin/systems/notes/class_notes.inc'
 ```
-No empty value are allowed
- 
+
+
 ## How to install
 
 `git https://github.com/gallak/fusiondirectory-plugins-pluginsmanager.git
@@ -68,7 +152,7 @@ mv fusiondirectory-plugins-pluginsmanager pluginsmanager`
 Setting fd_home to /usr/share/fusiondirectory
 Installing FusionDirectory's plugins
 Where is your plugins archive or folder?:
-<complete current path>            
+<complete current path>
 Available plugins:
 1:pluginsmanager
 
@@ -85,13 +169,13 @@ chmod u+x /usr/local/bin/fusiondirectory-plugin-manager```
 
 
 Fusiondirectoy-plugin-manager is a tool to manage plugin developped by community
-Install a plugin means 
+Install a plugin means
   - copy file in several place
   - register plugin inside FD installtion
   - scan all PHP classe
   - rebuild all language file
 
-options are 
+options are
   - set-fd_home=FD PATH' : path of fusiondirectory installtion
   - plugins-archive=SRC_PATH : path of directory ( or gz archive) of plugins to scan
   - plugin-name=plugin name : name of plugin ( contain in control.yaml file)
@@ -160,30 +244,30 @@ Setting fd_home to /usr/local/share/fusiondirectory
 List installed FusionDirectory plugins
 There are 4 Plugins configurations in the LDAP
  Plugin :account
-   - name	: account
-   - description	: FAKE plugin to test dependancie
-   - author	: 
-   - version	: 
-   - homeUrl	: https://github.com/gallak/fusiondirectory-plugins-account
+   - name   : account
+   - description    : FAKE plugin to test dependancie
+   - author :
+   - version    :
+   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-account
  Plugin :urbackup
-   - name	: urbackup
-   - description	: plugins which allow interactiong systeme and their urbackup configurations
-   - author	: 
-   - version	: 
-   - homeUrl	: https://github.com/gallak/fusiondirectory-plugins-urbackup
+   - name   : urbackup
+   - description    : plugins which allow interactiong systeme and their urbackup configurations
+   - author :
+   - version    :
+   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-urbackup
  Plugin :pluginsmanager
-   - name	: pluginsmanager
-   - description	: plugins which allow to managezr plugin, check consistencie
-   - author	: antoine.gallavardin@free.fr
-   - version	: 0.1
-   - homeUrl	: https://github.com/gallak/fusiondirectory-plugins-pluginmanager
+   - name   : pluginsmanager
+   - description    : plugins which allow to managezr plugin, check consistencie
+   - author : antoine.gallavardin@free.fr
+   - version    : 0.1
+   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-pluginmanager
  Plugin :notes
-   - name	: notes
-   - description	: plugings which allow user to add some notes on eache FD object
-   - author	: antoine.gallavardin@free.fr
-   - version	: 0.1
-   - homeUrl	: https://github.com/gallak/fusiondirectory-plugins-notes
-root@fd-14-dev:/usr/local/src# 
+   - name   : notes
+   - description    : plugings which allow user to add some notes on eache FD object
+   - author : antoine.gallavardin@free.fr
+   - version    : 0.1
+   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-notes
+root@fd-14-dev:/usr/local/src#
 ```
 
 ##### Show plugins file
@@ -203,7 +287,7 @@ Plugin urbackup contains following files
  - ./admin/systems/services/urbackup/class_serviceUrbackup.inc
  - ./locale/fr/fusiondirectory.po
  - ./locale/en/fusiondirectory.po
-root@fd-14-dev:/usr/local/src# 
+root@fd-14-dev:/usr/local/src#
 
 ```
 
@@ -217,18 +301,18 @@ Setting fd_home to /usr/local/share/fusiondirectory
 Delete one plugins
 Plugin notes is declared
 Plugin notes is NOT necessary for other plugins
-Files of pluginnotes will be removed !! 
+Files of pluginnotes will be removed !!
 Are you Sure (yes/NO)?
  [no]:
 yes
 Plugin notes contains following files
  DEL FILE : /usr/local/share/fusiondirectory/plugins/./admin/systems/notes/class_notes.inc
-Ldap record of pluginnotes will be removed !! 
+Ldap record of pluginnotes will be removed !!
 Are you Sure (yes/NO)?
  [no]:
 yes
 Scanning and update Class.cache and translations
-root@fd-14-dev:/usr/local/src# 
+root@fd-14-dev:/usr/local/src#
 
 
 ```
