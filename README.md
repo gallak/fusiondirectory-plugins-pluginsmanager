@@ -85,7 +85,6 @@ support:
   homeUrl : "https://github.com/gallak/fusiondirectory-plugins-notes"
   ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/issues"
   discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/wiki"
-  iconUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/icon.png"
   downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/archive/refs/heads/main.zip"
   schemaUrl : "https://schemas.fusiondirectory.info/"
 ```
@@ -96,7 +95,6 @@ support:
   homeUrl : "https://github.com/gallak/fusiondirectory-plugins-notes"
   ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/issues"
   discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/wiki"
-  iconUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/icon.png"
   downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/archive/refs/heads/main.zip"
   schemaUrl: "https://schemas.fusiondirectory.info/"
   contractUrl: https://www.fusiondirectory.org/abonnements-fusiondirectory/
@@ -190,7 +188,7 @@ Actions are
 
 #### Plugins liste inside dashboard
 
-Some informatiosn are available trough FusionDirectory web interface on the dashboard.
+Some informations are available trough FusionDirectory web interface on the dashboard.
 
 ![image info](././contrib/doc/capture1.png)
 
@@ -231,7 +229,6 @@ Installing FusionDirectory's plugins
 Installing plugin notes
 Plugin record exist : cn=notes,ou=plugins,ou=fusiondirectory,dc=demo,dc=fusion
 Deleting it !
-Use of uninitialized value $_[3] in concatenation (.) or string at /usr/share/perl5/Convert/ASN1/_encode.pm line 152.
 Create plugin record
 Scanning and update Class.cache and translations
 ```
