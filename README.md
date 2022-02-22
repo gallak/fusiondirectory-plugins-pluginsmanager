@@ -42,7 +42,7 @@ There is 4 parts:
 | status | mandatory | "Development" or "Stable"|
 | screenshotUrl | recommended | Array of Url of screenshot file ( png/gif/jpg)|
 | logoUrl | recommended | one url linke to the logo file|
-| tag | recommended | Array of tag uses for sorted plugins in market|
+| tags | recommended | Array of tag uses for sorted plugins in market|
 | license | mandatory | identifier of the license used like : GPLv2|
 | origin | mandatory | "Source" or "Package", it's used by the install script, if Package is specified, the script won't install/remove the plugin|
 
@@ -58,7 +58,7 @@ information:
   screenshotUrl:
    - https://raw.githubusercontent.com/gallak/fusiondirectory-plugins-notes/main/contrib/doc/capture1.png
   logoUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/logo.png"
-  tag: ["information","notes","plugin" ]
+  tags: ["information","notes","plugin" ]
   license: "GPLv2"
   origin: "source"
 ```
@@ -69,10 +69,10 @@ information:
 
 | keyword | community      | pro | description |
 | ---- | ----------------- | ---- | ---- |
+| provider | mandatory      | provider of support : "community" or name of the company |
 | homeUrl | mandatory      | mandatory | Link to the homepage of plugin                                               |
 | ticketUrl | recommended  | mandatory | Link to the ticket system of plugin                                          |
 | discussionUrl| recommended| mandatory | Link to the discussion page of plugin chat / forum                          |
-| iconUrl | recommended | mandatory | Link to the icon of plugin |
 | downloadUrl  | mandatory | mandatory | Link to the archive of the plugin                                            |
 | schemaUrl | recommended  | mandatory | Link to the LDAP schema used by plugin                                       |
 | contractUrl | none       | mandatory | Link to the company page wich proposed professionnal support for this plugin |
@@ -81,24 +81,25 @@ information:
 #### example of community support section
 ```
 support:
-  community:
-    homeUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager"   <== MANDATORY
-    ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/issues"
-    discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/wiki"
-    iconUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png"
-    downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/archive/refs/heads/main.zip"  <== MANDATORY
-    schemaUrl : "https://schemas.fusiondirectory.info/"
+  provider : community
+  homeUrl : "https://github.com/gallak/fusiondirectory-plugins-notes"
+  ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/issues"
+  discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/wiki"
+  iconUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/icon.png"
+  downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/archive/refs/heads/main.zip"
+  schemaUrl : "https://schemas.fusiondirectory.info/"
 ```
 #### example of professional support section
 ```
-  fusiondirectory:
-    homeUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager"   <== MANDATORY
-    ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/issues" <== MANDATORY
-    discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/wiki"  <== MANDATORY
-    iconUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/icon.png" <== MANDATORY
-    downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-pluginsmanager/archive/refs/heads/main.zip" <== MANDATORY
-    schemaUrl: "https://schemas.fusiondirectory.info/" <== MANDATORY
-    contractUrl: https://www.fusiondirectory.org/abonnements-fusiondirectory/ <== MANDATORY
+support:
+  provider: fusiondirectory
+  homeUrl : "https://github.com/gallak/fusiondirectory-plugins-notes"
+  ticketUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/issues"
+  discussionUrl : "https://github.com/gallak/fusiondirectory-plugins-notes/wiki"
+  iconUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/icon.png"
+  downloadUrl: "https://github.com/gallak/fusiondirectory-plugins-notes/archive/refs/heads/main.zip"
+  schemaUrl: "https://schemas.fusiondirectory.info/"
+  contractUrl: https://www.fusiondirectory.org/abonnements-fusiondirectory/
 ```
 
 ### Section `requirement`
@@ -107,8 +108,7 @@ support:
 | -------- | ---- | ---- |
 | fdVersion| mandatory | Minimal version  of FusionDirectory need for this plugin (small string)|
 | phpVersion | mandatory | Minimal version  of PHP need for this plugin (small string)          |
-
-
+| plugins | optionnal | List of plugins dependency
 #### example
 ```
 requirement:
@@ -122,10 +122,10 @@ This section is optionnal.
 
 | keyword | presence | description |
 | ----------- | ---- | ---- |
-| phpClassList| mandatory | PHP object classe used inside plugin          |
-| ldapObjectList   | mandatory | LDAP object classe needed by the plugin  |
-| ldapAttributeList| mandatory | LDAP Attributes list needed by the plugin|
-| fileList         | mandatory | List of file used byt the plugins        |
+| phpClassList| mandatory (if section is present)| PHP object classe used inside plugin          |
+| ldapObjectList   | mandatory (if section is present)| LDAP object classe needed by the plugin  |
+| ldapAttributeList| mandatory (if section is present)| LDAP Attributes list needed by the plugin|
+| fileList         | mandatory (if section is present)| List of file used byt the plugins        |
 
 #### Example
 ```
