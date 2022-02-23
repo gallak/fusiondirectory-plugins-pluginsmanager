@@ -52,7 +52,7 @@ use Archive::Extract;
 
 # used to copy files
 use File::Copy::Recursive qw(rcopy);
-
+use File::Path qw(rmtree);
 #XML parser
 use XML::Twig;
 
@@ -516,16 +516,39 @@ sub delete_plugin_file {
   my ($file_path) = @_;
   if ( -e $file_path ){
     my $file_deleted = unlink($file_path);
+    print(" - Deletion of ".$file_path." : ".$file_deleted." file removed)\n");
+  }else{
+    print(" - ".$file_path." don't exist\n");
   }
 }
 
 # function that remove directory
 sub delete_plugin_directory {
-  my ($file_path) = @_;
-  if ( -e $file_path ){
-     #my $files_dirs_copied = rcopy($plugin_dir."/*", $dest_dir);
+  my ($dir_path) = @_;
+  if ( -e $dir_path ){
+    opendir(my $dh, $dir_path);
+    my $nb_file=scalar(grep { $_ ne "." && $_ ne ".." } readdir($dh));
+    if ($nb_file == 0){
+        my $del_directory = rmdir($dir_path);
+        print(" - Deletion of ".$dir_path." (is empty!) : ".$del_directory." directory removed)\n");
+    }
+
+  }else{
+    print(" - ".$dir_path." don't exist\n");
   }
 }
+
+# function that remove directory
+sub delete_plugin_directory_recursively {
+  my ($dir_path) = @_;
+  if ( -e $dir_path ){
+        my $del_directory = rmtree($dir_path,{verbose => 0,safe => 1});
+        print(" - Deletion of ".$dir_path." : ".$del_directory." directory removed)\n");
+    }else{
+    print(" - ".$dir_path." don't exist");
+  }
+}
+
 
 # function that add plugin record
 sub add_plugin_record {
@@ -611,26 +634,35 @@ sub remove_plugin {
       exit(-1);
   }
 
+  my @filelist=get_plugin_files();
+  foreach my $f (@filelist){
+      print(" - ".$f."\n");
+  }
 
   my $delete_file = ask_user_input ("Files of plugin".$plugin_name." will be removed !! \nAre you Sure (yes/NO)?\n", "no");
 
   if ( $delete_file eq "yes" ){
     # remove files
     # get all file declared inside plugin
-    my @filelist=get_plugin_files();
+
+
     foreach my $f (@filelist){
          # if ./addons/ , ./admin/, ./config/ , ./personal/
          if ( $f =~ /^\.\/admin\// or $f =~ /^\.\/config\// or $f =~ /^\.\/addons\// or $f =~ /^\.\/personal\//) {
            delete_plugin_file($vars{fd_home}."/plugins/".$f);
          }
 
+         # if ./locale
+         if ( $f =~ /^\.\/locale\// ){
+           delete_plugin_file($vars{fd_home}."/locale/plugins/".$plugin_name."/".$f);
 
-        # delete_plugin_file($vars{fd_home}."/plugins/".$f);
+         }
+
          # if ./html/ , ./ihtml/, ./include/, ./contrib/openldap/ , /contrib/doc/
          if ( $f =~ /^\.\/html\// or $f =~ /^\.\/ihtml\// or $f =~ /^\.\/include\// or $f =~ /^\.\/contrib\/openldap\//) {
            delete_plugin_file($vars{fd_home}."/".$f);
          }
-         # if /contrib/etc/", $vars{fd_config_dir}."/".$plugin."/");
+         # if .//contrib/etc/"
          if ( $f =~ /^\.\/contrib\/etc\// ){
            delete_plugin_directory($vars{fd_config_dir}."/".$plugin_name);
          }
@@ -641,6 +673,13 @@ sub remove_plugin {
          }
 
       }
+      # deletion of empty folder
+      delete_plugin_directory_recursively($vars{fd_home}."/locale/plugins/".$plugin_name."/");
+      delete_plugin_directory($vars{fd_home}."/plugins/admin/".$plugin_name."/");
+      delete_plugin_directory($vars{fd_home}."/plugins/admin/groups/".$plugin_name."/");
+      delete_plugin_directory($vars{fd_home}."/plugins/personnal/".$plugin_name."/");
+      delete_plugin_directory($vars{fd_home}."/plugins/config/".$plugin_name."/");
+
     }else {
       print $plugin_name." files wasn't removed!\n";
     }
@@ -652,9 +691,10 @@ sub remove_plugin {
       print $plugin_name." ldap record was not deleted!\n";
     }
   #finally update FusionDirectory's class.cache and locales
-  print "Scanning and update Class.cache and translations\n";
+  print("Scanning and update Class.cache and translations\n");
   rescan_classes();
   rescan_i18n();
+  print(" WARNING : Plugin ".$plugin_name." has been removed, but LDAP tree could contains data created by this plugin\nSo, Ldap schema won't be removed, as data related to.\nKeep in mind to clean LDAP tree, you could see ldap objects/attributes concerned in control file\n");
 }
 
 # function that check if plugin is inserted ldap tree
