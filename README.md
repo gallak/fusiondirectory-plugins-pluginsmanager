@@ -180,10 +180,10 @@ options are
 
 Actions are
   - --install-plugin : install plugin inside FD installation
-  - --only-register : register plugin inside FD installtion
-  - --list-plugins : show all community plugins installed
+  - --only-register : register plugin inside FD installation
+  - --list-plugins : show all plugins installed
   - --display-plugin-file : see all files declared in plugin
-  - --remove
+  - --remove-plugin
 
 
 #### Plugins liste inside dashboard
@@ -198,93 +198,75 @@ Some informations are available trough FusionDirectory web interface on the dash
 ##### install plugin from source folder
 
 ```
-./fd-plugins/pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory --plugin-name=notes --plugins-archive=/usr/local/src/fd-plugins --install-plugin
+./pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory  --plugin-name=notes --plugins-archive=/usr/local/src/ --install-plugin
 Setting fd_home to /usr/local/share/fusiondirectory
 plugin notes will be used
-Plugins folder /usr/local/src/fd-plugins will be used
-Install only Ldap record of plugin
+Plugins folder /usr/local/src/ will be used
+Installing FusionDirectory's plugins
 Installing plugin notes
-ajout yaml
-Plugin record exist : cn=notes,ou=plugins,ou=fusiondirectory,dc=demo,dc=fusion
-Deleting it !
 Create plugin record
- COPY : /usr/local/src/fd-plugins/notes/admin//*   = > /usr/local/share/fusiondirectory/plugins/admin/
- COPY : /usr/local/src/fd-plugins/notes/config//*   = > /usr/local/share/fusiondirectory/plugins/config/
- COPY : /usr/local/src/fd-plugins/notes/html//*   = > /usr/local/share/fusiondirectory/html/
- COPY : /usr/local/src/fd-plugins/notes/include//*   = > /usr/local/share/fusiondirectory/include/
- COPY : /usr/local/src/fd-plugins/notes/contrib/openldap//*   = > /usr/local/share/fusiondirectory/contrib/openldap/
- COPY : /usr/local/src/fd-plugins/notes/locale//*   = > /usr/local/share/fusiondirectory/locale/plugins/notes/locale/
 Scanning and update Class.cache and translations
 ```
 
 ##### register plugin inside FusionDirectory installation
 
 ```
-./fd-plugins/pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory --plugin-name=notes --plugins-archive=/usr/local/src/fd-plugins --only-register
-
+./pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory  --plugin-name=notes --plugins-archive=/usr/local/src/ --only-register
 Setting fd_home to /usr/local/share/fusiondirectory
 plugin notes will be used
-Plugins folder /usr/local/src/fd-plugins will be used
-Installing FusionDirectory's plugins
+Plugins folder /usr/local/src/ will be used
+Only register inside LDAP
 Installing plugin notes
 Plugin record exist : cn=notes,ou=plugins,ou=fusiondirectory,dc=demo,dc=fusion
 Deleting it !
 Create plugin record
 Scanning and update Class.cache and translations
+
 ```
 
 ##### list installed plugins
 
 ```
-root@fd-14-dev:/usr/local/src# ./fd-plugins/pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory  --list-plugins
+./pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory  --list-plugins
 Setting fd_home to /usr/local/share/fusiondirectory
 List installed FusionDirectory plugins
-There are 4 Plugins configurations in the LDAP
- Plugin :account
-   - name   : account
-   - description    : FAKE plugin to test dependancie
-   - author :
-   - version    :
-   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-account
- Plugin :urbackup
-   - name   : urbackup
-   - description    : plugins which allow interactiong systeme and their urbackup configurations
-   - author :
-   - version    :
-   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-urbackup
+There are 2 Plugins configurations in the LDAP
  Plugin :pluginsmanager
    - name   : pluginsmanager
-   - description    : plugins which allow to managezr plugin, check consistencie
-   - author : antoine.gallavardin@free.fr
+   - description    : This plugins provide a way to manage plugins trough command line and increase plugins installation from other contributor
+   - authors    : antoine.gallavardin@free.fr
    - version    : 0.1
-   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-pluginmanager
+   - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-pluginsmanager
+   - status : developpement
+   - provider   : community
+   - origin : source
  Plugin :notes
    - name   : notes
    - description    : plugings which allow user to add some notes on eache FD object
-   - author : antoine.gallavardin@free.fr
+   - authors    : antoine.gallavardin@free.fr
    - version    : 0.1
    - homeUrl    : https://github.com/gallak/fusiondirectory-plugins-notes
-root@fd-14-dev:/usr/local/src#
+   - status : stable
+   - provider   : communit
+   - origin : source
 ```
 
 ##### Show plugins file
 
 ```
-root@fd-14-dev:/usr/local/src# ./fd-plugins/pluginsmanager/fusiondirectory-plugin-manager --plugin-name=urbackup --set-fd_home=/usr/local/share/fusiondirectory  --show-plugin-files
-plugin urbackup will be used
+./pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory  --plugin-name=notes --plugins-archive=/usr/local/src/ --show-plugin-files
 Setting fd_home to /usr/local/share/fusiondirectory
-Show all files deleared for this plugins
-Plugin urbackup contains following files
- - ./include/urbackup/class_urbackup.php
- - ./include/urbackup/test.php
- - ./config/urbackup/class_urbackupConfig.inc
- - ./admin/systems/urbackup/class_urbackupClient.inc
- - ./admin/systems/urbackup/urbackup_client.tpl
- - ./admin/systems/urbackup/urbackup_backup.tpl
- - ./admin/systems/services/urbackup/class_serviceUrbackup.inc
- - ./locale/fr/fusiondirectory.po
+plugin notes will be used
+Plugins folder /usr/local/src/ will be used
+Display files used by plugins
+Plugin notes is declared
+Plugin notes contains following files
+ - ./admin/systems/notes/class_notes.inc
  - ./locale/en/fusiondirectory.po
-root@fd-14-dev:/usr/local/src#
+ - ./locale/fr/fusiondirectory.po
+ - ./contrib/openldap/notes-fd.schema
+ - ./html/themes/breezy/icons/16/apps/notes.png
+ - ./html/themes/breezy/icons/48/apps/notes.png
 
 ```
 
@@ -292,26 +274,40 @@ root@fd-14-dev:/usr/local/src#
 ##### Remove plugin file
 
 ```
-root@fd-14-dev:/usr/local/src# ./fd-plugins/pluginsmanager/fusiondirectory-plugin-manager --plugin-name=notes --set-fd_home=/usr/local/share/fusiondirectory  --remove-plugin
-plugin notes will be used
+./pluginsmanager/fusiondirectory-plugin-manager --set-fd_home=/usr/local/share/fusiondirectory  --plugin-name=notes --plugins-archive=/usr/local/src/ --remove-plugin
 Setting fd_home to /usr/local/share/fusiondirectory
+plugin notes will be used
+Plugins folder /usr/local/src/ will be used
 Delete one plugins
 Plugin notes is declared
 Plugin notes is NOT necessary for other plugins
-Files of pluginnotes will be removed !!
+Plugin notes contains following files
+ - ./admin/systems/notes/class_notes.inc
+ - ./locale/en/fusiondirectory.po
+ - ./locale/fr/fusiondirectory.po
+ - ./contrib/openldap/notes-fd.schema
+ - ./html/themes/breezy/icons/16/apps/notes.png
+ - ./html/themes/breezy/icons/48/apps/notes.png
+Files of plugin notes will be removed !!
 Are you Sure (yes/NO)?
  [no]:
 yes
-Plugin notes contains following files
- DEL FILE : /usr/local/share/fusiondirectory/plugins/./admin/systems/notes/class_notes.inc
+ - Deletion of /usr/local/share/fusiondirectory/plugins/./admin/systems/notes/class_notes.inc : 1 file removed)
+ - Deletion of /usr/local/share/fusiondirectory/locale/plugins/notes/./locale/en/fusiondirectory.po : 1 file removed)
+ - Deletion of /usr/local/share/fusiondirectory/locale/plugins/notes/./locale/fr/fusiondirectory.po : 1 file removed)
+ - Deletion of /usr/local/share/fusiondirectory/./contrib/openldap/notes-fd.schema : 1 file removed)
+ - Deletion of /usr/local/share/fusiondirectory/./html/themes/breezy/icons/16/apps/notes.png : 1 file removed)
+ - Deletion of /usr/local/share/fusiondirectory/./html/themes/breezy/icons/48/apps/notes.png : 1 file removed)
+ - Deletion of /usr/local/share/fusiondirectory/locale/plugins/notes/ : 4 directory removed)
+ - Deletion of /usr/local/share/fusiondirectory/plugins/admin/systems/notes/ (is empty!) : 1 directory removed)
 Ldap record of pluginnotes will be removed !!
 Are you Sure (yes/NO)?
  [no]:
 yes
 Scanning and update Class.cache and translations
-root@fd-14-dev:/usr/local/src#
-
-
+ WARNING : Plugin notes has been removed, but LDAP tree could contains data created by this plugin
+So, Ldap schema won't be removed, as data related to.
+Keep in mind to clean LDAP tree, you could see ldap objects/attributes concerned in control file
 ```
 ### Additional Informations
 
@@ -319,7 +315,7 @@ root@fd-14-dev:/usr/local/src#
 
 As `fusiondirectory-plugins-manager` command install plugins it could remove plugins
 
-Yaml file could be used to add quickly plugins on future https;//plugins.fusiondirectory.org website.
+Yaml file could be used to add quickly plugins on future https://plugins.fusiondirectory.org website.
 
 This website could provide a list of plugin wich are available to install .
 
